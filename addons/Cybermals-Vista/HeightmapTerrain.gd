@@ -11,6 +11,20 @@ func _ready():
 	pass
 	
 	
+func set_material(value):
+	material = value
+	
+	if not get_tree():
+		return
+		
+	get_tree().call_group(
+		get_tree().GROUP_CALL_DEFAULT, 
+		"HeightmapTerrainChunk", 
+		"set_material_override", 
+		material
+	)
+	
+	
 func set_heightmap(value):
 	heightmap = value
 	
@@ -70,17 +84,14 @@ func _create_chunk(pos, image):
 	chunk.set_material_override(material)
 	chunk.set_translation(Vector3(pos.x, 0.0, pos.y))
 	add_child(chunk)
-
-
-func set_material(value):
-	material = value
 	
-	if not get_tree():
-		return
-		
-	get_tree().call_group(
-		get_tree().GROUP_CALL_DEFAULT, 
-		"HeightmapTerrainChunk", 
-		"set_material_override", 
-		material
-	)
+	#Generate static body
+	var body = StaticBody.new()
+	body.add_shape(chunk.get_mesh().create_trimesh_shape())
+	chunk.add_child(body)
+	
+	var colshape = CollisionShape.new()
+	colshape.set_shape(body.get_shape(0))
+	body.add_child(colshape)
+	
+	return chunk
