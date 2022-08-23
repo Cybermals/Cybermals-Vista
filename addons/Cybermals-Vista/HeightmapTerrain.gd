@@ -95,3 +95,74 @@ func _create_chunk(pos, image):
 	body.add_child(colshape)
 	
 	return chunk
+	
+	
+func get_height(x, z):
+	#Remove scale from input coords
+	x = x / get_scale().x
+	z = z / get_scale().z
+	
+	#Do bounds check
+	var size = heightmap.get_size()
+	
+	if x < 0 or x > size.x - 1:
+		return 0
+		
+	if z < 0 or z > size.y - 1:
+		return 0
+		
+	#Sample the height of the 4 points around the given coordinate
+	var image = heightmap.get_data()
+	var h1 = image.get_pixel(floor(x), floor(z)).r
+	var h2 = image.get_pixel(ceil(x), floor(z)).r
+	var h3 = image.get_pixel(floor(x), ceil(z)).r
+	var h4 = image.get_pixel(ceil(x), ceil(z)).r
+	
+	#Now calculate the difference between the left and right pairs of heights
+	var dx1 = h2 - h1
+	var dx2 = h4 - h3
+	
+	#Then calculate the front and back heights at the given X coordinate
+	var xfactor = ceil(x) - floor(x)
+	var hx1 = h1 + dx1 * xfactor
+	var hx2 = h3 + dx2 * xfactor
+	
+	#And now we calculate the height at the given point
+	var zfactor = ceil(z) - floor(z)
+	return (hx1 + (hx2 - hx1) * zfactor) * get_scale().y
+	
+
+func set_height(x, z, h):
+	#Remove scale from input coords and height
+	x = int(x / get_scale().x)
+	z = int(z / get_scale().z)
+	h = h / get_scale().y
+	
+	#Update heightmap
+	var image = heightmap.get_data()
+	image.put_pixel(x, z, Color(h, h, h))
+	heightmap.set_data(image)
+	
+	#Calculate which chunk contains the point and the offset within the chunk
+	var cx = int(x / 64)
+	var cz = int(z / 64)
+	var ox = x % 64
+	var oz = z % 64
+	
+	#Delete old chunk and generate new chunk
+	chunks[cz][cx].queue_free()
+	chunks[cz][cx] = _create_chunk(Vector2(cx * 64, cz * 64), image.get_rect(Rect2(cx * 64, cz * 64, 65, 65)))
+	
+	#Handle (literal) edge cases to prevent holes in the terrain mesh
+	if not ox and cx:
+		chunks[cz][cx - 1].queue_free()
+		chunks[cz][cx - 1] = _create_chunk(Vector2((cx - 1) * 64, cz * 64), image.get_rect(Rect2((cx - 1) * 64, cz * 64, 65, 65)))
+		
+	if not oz and cz:
+		chunks[cz - 1][cx].queue_free()
+		chunks[cz - 1][cx] = _create_chunk(Vector2(cx * 64, (cz - 1) * 64), image.get_rect(Rect2(cx * 64, (cz - 1) * 64, 65, 65)))
+		
+	#Handle "corner" cases too
+	if not ox and not oz and cx and cz:
+		chunks[cz - 1][cx - 1].queue_free()
+		chunks[cz - 1][cx - 1] = _create_chunk(Vector2((cx - 1) * 64, (cz - 1) * 64), image.get_rect(Rect2((cx - 1) * 64, (cz - 1) * 64, 65, 65)))
