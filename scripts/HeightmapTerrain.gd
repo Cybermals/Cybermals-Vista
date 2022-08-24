@@ -2,6 +2,9 @@ extends Spatial
 
 
 func _ready():
+	#Wait for terrain rebuilding to complete
+	get_node("HeightmapTerrain").wait_till_rebuilt()
+	
 	#Enable event processing
 	set_process(true)
 	

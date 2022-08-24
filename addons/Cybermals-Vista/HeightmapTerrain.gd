@@ -4,7 +4,10 @@ extends Spatial
 export (Material) var material = null setget set_material
 export (ImageTexture) var heightmap = null setget set_heightmap
 
+const ThreadPool = preload("ThreadPool.gd")
+
 var chunks = []
+var thread_pool = ThreadPool.new()
 
 
 func _ready():
@@ -56,6 +59,25 @@ func set_heightmap(value):
 			
 			
 func _create_chunk(pos, image):
+	#Generate mesh instance
+	var chunk = MeshInstance.new()
+	chunk.set_name("Chunk")
+	chunk.add_to_group("HeightmapTerrainChunk")
+	chunk.set_material_override(material)
+	chunk.set_translation(Vector3(pos.x, 0.0, pos.y))
+	add_child(chunk)
+	
+	#Queue chunk generation
+	thread_pool.queue_job(self, "_generate_chunk_mesh", [chunk, pos, image])
+	return chunk
+	
+	
+func _generate_chunk_mesh(data):
+	print("Generating chunk mesh...")
+	var chunk = data[0]
+	var pos = data[1]
+	var image = data[2]
+	
 	#Generate mesh
 	var st = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -76,14 +98,13 @@ func _create_chunk(pos, image):
 			
 	st.generate_normals()
 	
-	#Generate mesh instance
-	var chunk = MeshInstance.new()
-	chunk.set_name("Chunk")
-	chunk.add_to_group("HeightmapTerrainChunk")
+	#Finish chunk (must be done from the main thread to avoid race conditions)
+	call_deferred("_finish_chunk", chunk, st)
+	
+	
+func _finish_chunk(chunk, st):
+	#Set chunk mesh
 	chunk.set_mesh(st.commit())
-	chunk.set_material_override(material)
-	chunk.set_translation(Vector3(pos.x, 0.0, pos.y))
-	add_child(chunk)
 	
 	#Generate static body
 	var body = StaticBody.new()
@@ -93,8 +114,6 @@ func _create_chunk(pos, image):
 	var colshape = CollisionShape.new()
 	colshape.set_shape(body.get_shape(0))
 	body.add_child(colshape)
-	
-	return chunk
 	
 	
 func get_height(x, z):
@@ -133,6 +152,9 @@ func get_height(x, z):
 	
 
 func set_height(x, z, h):
+	#Wait till chunk rebuilding is complete
+	wait_till_rebuilt()
+	
 	#Remove scale from input coords and height
 	x = int(x / get_scale().x)
 	z = int(z / get_scale().z)
@@ -166,3 +188,9 @@ func set_height(x, z, h):
 	if not ox and not oz and cx and cz:
 		chunks[cz - 1][cx - 1].queue_free()
 		chunks[cz - 1][cx - 1] = _create_chunk(Vector2((cx - 1) * 64, (cz - 1) * 64), image.get_rect(Rect2((cx - 1) * 64, (cz - 1) * 64, 65, 65)))
+		
+		
+func wait_till_rebuilt():
+	#Wait until the terrain has been fully rebuilt
+	while thread_pool.get_queue_size():
+		OS.delay_msec(100)
