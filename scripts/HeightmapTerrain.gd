@@ -3,7 +3,7 @@ extends Spatial
 
 func _ready():
 	#Wait for terrain rebuilding to complete
-	get_node("HeightmapTerrain").wait_till_rebuilt()
+	yield(get_node("HeightmapTerrain"), "rebuild_complete")
 	
 	#Enable event processing
 	set_process(true)
@@ -19,3 +19,7 @@ func _process(delta):
 		
 	#Move one of the vertices up and down over time
 	get_node("HeightmapTerrain").set_height(64, 64, 50 * sin(deg2rad(OS.get_ticks_msec() / 100)))
+
+
+func _on_HeightmapTerrain_rebuild_progress(current, total):
+	print("Rebuilt chunk " + str(current) + " of " + str(total))

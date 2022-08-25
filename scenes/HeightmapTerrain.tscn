@@ -67,16 +67,19 @@ uniform texture rock;
 uniform texture dirt_mask;
 uniform texture rock_mask;
 
-vec3 col = tex(grass, UV * 512).rgb;
+//Sample base texture
+vec3 col = tex(grass, UV * vec2(512, 512)).rgb;
 
-if(tex(dirt_mask, UV).a > 0.0)
+//Is this portion dirt?
+if(tex(dirt_mask, UV).a != 0)
 {
-    col = tex(dirt, UV * 512).rgb;
+    col = tex(dirt, UV * vec2(512, 512)).rgb;
 }
 
-if(tex(rock_mask, UV).a > 0.0)
+//Is this portion rock?
+if(tex(rock_mask, UV).a != 0)
 {
-    col = tex(rock, UV * 512).rgb;
+    col = tex(rock, UV * vec2(512, 512)).rgb;
 }
 
 DIFFUSE = col;",
@@ -98,7 +101,7 @@ flags/lightmap_on_uv2 = true
 flags/colarray_is_srgb = false
 params/blend_mode = 0
 params/depth_draw = 1
-params/line_width = 1.0
+params/line_width = 0.0
 shader/shader = SubResource( 2 )
 shader_param/grass = ExtResource( 8 )
 shader_param/dirt = ExtResource( 6 )
@@ -180,5 +183,7 @@ heightmap = ExtResource( 11 )
 [node name="Cube" parent="." instance=ExtResource( 12 )]
 
 transform/local = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 47.7939, 32.5109, 7.79119 )
+
+[connection signal="rebuild_progress" from="HeightmapTerrain" to="." method="_on_HeightmapTerrain_rebuild_progress"]
 
 

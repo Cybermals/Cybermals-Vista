@@ -9,7 +9,9 @@ func _ready():
 	
 func unload_all():
 	if has_node("HeightmapTerrain"):
-		get_node("HeightmapTerrain").queue_free()
+		var scene = get_node("HeightmapTerrain")
+		remove_child(scene)
+		scene.queue_free()
 
 
 func _on_TestHeightmapTerrainButton_pressed():
