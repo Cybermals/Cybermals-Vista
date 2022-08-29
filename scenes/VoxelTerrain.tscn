@@ -1,0 +1,77 @@
+[gd_scene load_steps=6 format=1]
+
+[ext_resource path="res://addons/Cybermals-EagleEye/FlyCam.gd" type="Script" id=1]
+[ext_resource path="res://addons/Cybermals-EagleEye/FlyCam.png" type="Texture" id=2]
+[ext_resource path="res://addons/Cybermals-Vista/VoxelTerrain/VoxelTerrain.gd" type="Script" id=3]
+[ext_resource path="res://addons/Cybermals-Vista/VoxelTerrain/VoxelTerrain.png" type="Texture" id=4]
+[ext_resource path="res://voxel-data/test.tres" type="Resource" id=5]
+
+[node name="VoxelTerrain" type="Spatial"]
+
+_import_transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 )
+
+[node name="DirectionalLight" type="DirectionalLight" parent="."]
+
+_import_transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 )
+transform/local = Transform( 1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 26.4431, 0 )
+layers = 1
+params/enabled = true
+params/editor_only = false
+params/bake_mode = 0
+params/energy = 1.0
+colors/diffuse = Color( 1, 1, 1, 1 )
+colors/specular = Color( 1, 1, 1, 1 )
+shadow/shadow = false
+shadow/darkening = 0.0
+shadow/z_offset = 0.05
+shadow/z_slope_scale = 0.0
+shadow/esm_multiplier = 60.0
+shadow/blur_passes = 1.0
+projector = null
+operator = 0
+shadow/mode = 0
+shadow/max_distance = 0.0
+shadow/split_weight = 0.5
+shadow/zoffset_scale = 2.0
+
+[node name="FlyCam" type="Camera" parent="."]
+
+_import_transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 )
+transform/local = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 12.8706, 0 )
+projection = 0
+fov = 45.0
+near = 0.1
+far = 200.0
+keep_aspect = 1
+current = false
+visible_layers = 1048575
+environment = null
+h_offset = 0.0
+v_offset = 0.0
+script/script = ExtResource( 1 )
+__meta__ = {
+"_editor_icon": ExtResource( 2 )
+}
+move_speed = 8
+look_speed = 128
+slowdown_factor = 0.5
+rotation = Vector3( 0, 135, 0 )
+
+[node name="RayCast" type="RayCast" parent="FlyCam"]
+
+_import_transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 )
+enabled = false
+cast_to = Vector3( 0, 0, -8 )
+layer_mask = 1
+type_mask = 15
+
+[node name="VoxelTerrain" type="Spatial" parent="."]
+
+_import_transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 )
+script/script = ExtResource( 3 )
+__meta__ = {
+"_editor_icon": ExtResource( 4 )
+}
+voxel_data = ExtResource( 5 )
+
+

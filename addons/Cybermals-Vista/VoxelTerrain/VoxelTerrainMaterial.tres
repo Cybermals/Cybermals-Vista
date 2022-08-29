@@ -1,0 +1,27 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=1]
+
+[sub_resource type="MaterialShader" id=1]
+
+_code = {
+"fragment": "DIFFUSE = vec3(0, 1.0, 0);",
+"fragment_ofs": 0,
+"light": "",
+"light_ofs": 0,
+"vertex": "",
+"vertex_ofs": 0
+}
+
+[resource]
+
+flags/visible = true
+flags/double_sided = false
+flags/invert_faces = false
+flags/unshaded = false
+flags/on_top = false
+flags/lightmap_on_uv2 = true
+flags/colarray_is_srgb = false
+params/blend_mode = 0
+params/depth_draw = 1
+params/line_width = 0.0
+shader/shader = SubResource( 1 )
+
