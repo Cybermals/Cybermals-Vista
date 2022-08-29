@@ -18,7 +18,7 @@ func _process(delta):
 		#print("Height at Collision: " + str(height))
 		
 	#Move one of the vertices up and down over time
-	get_node("HeightmapTerrain").set_height(64, 64, 50 * sin(deg2rad(OS.get_ticks_msec() / 100)))
+	#get_node("HeightmapTerrain").set_height(64, 64, 50 * sin(deg2rad(OS.get_ticks_msec() / 100)))
 
 
 func _on_HeightmapTerrain_rebuild_progress(current, total):

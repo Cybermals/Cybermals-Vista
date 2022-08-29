@@ -6,8 +6,8 @@ func _enter_tree():
 	add_custom_type(
 		"HeightmapTerrain", 
 		"Spatial",
-		preload("HeightmapTerrain.gd"),
-		preload("HeightmapTerrain.png")
+		preload("HeightmapTerrain/HeightmapTerrain.gd"),
+		preload("HeightmapTerrain/HeightmapTerrain.png")
 	)
 	
 	
