@@ -4,34 +4,54 @@ signal rebuild_progress(current, total)
 signal rebuild_complete
 
 var voxels = IntArray([])
+var chunks = []
 
 export (Vector3) var size = Vector3(512, 64, 512) setget set_size
 export (Material) var material = null setget set_material
 
-var chunks = []
-var rebuild_state = null
+var Chunk = preload("VoxelTerrainChunk.gd")
+var queue_sorted = false
+var rebuild_queue = []
 
 
 func _ready():
-	for z in range(512):
-		for y in range(64):
-			for x in range(512):
+	#Enable event processing
+	set_process(true)
+	
+	for z in range(size.z):
+		for y in range(size.y):
+			for x in range(size.x):
 				if y == 63:
 					set_voxel(x, y, z, 2)
 					
 				else:
 					set_voxel(x, y, z, 1)
-	
-	rebuild_state = rebuild()
-	
-	#Enable event processing
-	set_process(true)
-	
-	
+					
+					
 func _process(delta):
-	#Resume terrain rebuilding
-	if rebuild_state:
-		rebuild_state = rebuild_state.resume()
+	#Does the rebuild queue need to be sorted?
+	if not queue_sorted:
+		rebuild_queue.sort_custom(self, "_by_distance")
+		queue_sorted = true
+	
+	#Are there chunks to rebuild?
+	if not rebuild_queue.empty():
+		#Get next chunk to rebuild
+		var chunk_pos = rebuild_queue.front()
+		rebuild_queue.pop_front()
+		
+		#Free old chunk and build new chunk
+		var chunks_size = size / 16
+		var i = chunk_pos.x * chunks_size.x * chunks_size.y + chunk_pos.y * chunks_size.x + chunk_pos.x
+		
+		if chunks[i]:
+			chunks[i].queue_free()
+			
+		chunks[i] = _create_chunk(chunk_pos * 16)
+		
+	else:
+		#Emit rebuild complete signal
+		emit_signal("rebuild_complete")
 	
 	
 func get_voxel(x, y, z):
@@ -39,6 +59,7 @@ func get_voxel(x, y, z):
 	if x < 0 or x >= size.x or y < 0 or y >= size.y or z < 0 or z >= size.z:
 		return 0
 		
+	#Return the given voxel
 	return voxels[z * size.x * size.y + y * size.x + x]
 	
 	
@@ -47,12 +68,44 @@ func set_voxel(x, y, z, value):
 	if x < 0 or x >= size.x or y < 0 or y >= size.y or z < 0 or z >= size.z:
 		return
 		
+	#Set the given voxel
 	voxels[z * size.x * size.y + y * size.x + x] = value
+	
+	#Queue the containing chunk for rebuilding if it isn't already
+	var chunk_pos = Vector3(int(x / 16), int(y / 16), int(z / 16))
+	var chunks_size = size / 16
+	var chunk = chunks[chunk_pos.z * chunks_size.x * chunks_size.y + chunk_pos.y * chunks_size.x + chunk_pos.x]
+	
+	if chunk == null:
+		rebuild_queue.append(chunk_pos)
+		queue_sorted = false
+		
+	elif chunk != null and not chunk.dirty:
+		chunk.dirty = true
+		rebuild_queue.append(chunk_pos)
+		queue_sorted = false
 	
 	
 func set_size(value):
 	size = value
+	
+	#Clear the rebuild queue, clear the chunk list, free existing chunks,
+	#resize the voxel array, and resize the chunk array
+	rebuild_queue.clear()
+	
+	if get_tree():
+		get_tree().call_group(
+		    get_tree().GROUP_CALL_DEFAULT,
+		    "VoxelTerrainChunk",
+		    "queue_free"
+		)
+	
 	voxels.resize(size.x * size.y * size.z)
+	chunks.resize((size.x / 16) * (size.y / 16) * (size.z / 16))
+	
+	#Fill the chunk array with placeholders
+	for i in range(chunks.size()):
+		chunks[i] = Chunk.new()
 	
 	
 func set_material(value):
@@ -65,40 +118,6 @@ func set_material(value):
 		    "set_material_override",
 		    value
 		)
-	
-	
-func rebuild():
-	#Skip rebuilding if there is no voxel data
-	if voxels == null:
-		return
-		
-	#Free old chunks
-	if get_tree():
-		get_tree().call_group(
-		    get_tree().GROUP_CALL_DEFAULT,
-		    "VoxelTerrainChunk",
-		    "queue_free"
-		)
-		chunks.clear()
-		
-	#Rebuild terrain
-	for z in range(0, size.z, 16):
-		var layer = []
-		
-		for y in range(0, size.y, 16):
-			var row = []
-			
-			for x in range(0, size.x, 16):
-				row.append(_create_chunk(Vector3(x, y, z)))
-				emit_signal("rebuild_progress", z * size.x * size.y + y * size.x + x, voxels.size())
-				yield()
-				
-			layer.append(row)
-			
-		chunks.append(layer)
-		
-	#Emit rebuild complete signal
-	emit_signal("rebuild_complete")
 
 
 func _create_chunk(pos):
@@ -152,9 +171,7 @@ func _create_chunk(pos):
 	st2.commit(mesh)
 	
 	#Create mesh instance
-	var chunk = MeshInstance.new()
-	chunk.set_name("Chunk")
-	chunk.add_to_group("VoxelTerrainChunk")
+	var chunk = Chunk.new()
 	chunk.set_mesh(mesh)
 	chunk.set_material_override(material)
 	chunk.set_translation(pos)
@@ -343,3 +360,11 @@ func _gen_voxel_back(st, st2, pos, voxel):
 	st.add_vertex(v4 + pos)
 	st.add_uv(uv1 + uv_inc)
 	st.add_vertex(v1 + pos)
+	
+	
+func _by_distance(a, b):
+	#Get current camera position
+	var cam_pos = get_viewport().get_camera().get_translation()
+	
+	#Compare distance from the camera
+	return cam_pos.distance_to(a) < cam_pos.distance_to(b)
