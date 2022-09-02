@@ -13,7 +13,6 @@
 [ext_resource path="res://images/heightmap.png" type="Texture" id=11]
 [ext_resource path="res://scenes/Cube.tscn" type="PackedScene" id=12]
 
-
 [sub_resource type="Environment" id=1]
 
 ambient_light/enabled = true
