@@ -1,22 +1,21 @@
+tool
 extends Spatial
 
-signal rebuild_progress(current, total)
 signal rebuild_complete
 
-var voxels = IntArray([])
-var chunks = []
-
-export (Vector3) var size = Vector3(512, 64, 512) setget set_size
-export (Material) var material = null setget set_material
-
 var Chunk = preload("VoxelTerrainChunk.gd")
-var queue_sorted = false
+var voxels = IntArray([])
 var rebuild_queue = []
+var queue_sorted = false
+
+export (Material) var material = null setget set_material
+export (Vector3) var size = Vector3(128, 64, 128) setget set_size
 
 
 func _ready():
 	#Enable event processing
 	set_process(true)
+	yield(self, "rebuild_complete")
 	
 	for z in range(size.z):
 		for y in range(size.y):
@@ -36,22 +35,115 @@ func _process(delta):
 	
 	#Are there chunks to rebuild?
 	if not rebuild_queue.empty():
-		#Get next chunk to rebuild
-		var chunk_pos = rebuild_queue.front()
+		#Rebuild next chunk
+		var chunk = rebuild_queue.front()
 		rebuild_queue.pop_front()
-		
-		#Free old chunk and build new chunk
-		var chunks_size = size / 16
-		var i = chunk_pos.x * chunks_size.x * chunks_size.y + chunk_pos.y * chunks_size.x + chunk_pos.x
-		
-		if chunks[i]:
-			chunks[i].queue_free()
-			
-		chunks[i] = _create_chunk(chunk_pos * 16)
+		_rebuild_chunk(chunk)
 		
 	else:
 		#Emit rebuild complete signal
 		emit_signal("rebuild_complete")
+		
+		
+func set_material(value):
+	material = value
+	
+	if get_tree():
+		get_tree().call_group(
+		    get_tree().GROUP_CALL_DEFAULT,
+		    "VoxelTerrainChunk",
+		    "set_material_override",
+		    value
+		)
+	
+	
+func set_size(value):
+	size = value
+	
+	#Clear the rebuild queue, clear the chunk list, free existing chunks,
+	#resize the voxel array, and resize the chunk array
+	rebuild_queue.clear()
+	
+	if get_tree():
+		get_tree().call_group(
+		    get_tree().GROUP_CALL_DEFAULT,
+		    "VoxelTerrainChunk",
+		    "queue_free"
+		)
+		yield(get_tree(), "idle_frame")
+	
+	voxels.resize(size.x * size.y * size.z)
+	
+	#Initialize chunks
+	for z in range(0, size.z, 16):
+		for y in range(0, size.y, 16):
+			for x in range(0, size.x, 16):
+				#Create chunk
+				var chunk = Chunk.new()
+				chunk.set_name("Chunk" + str(Vector3(x, y, z)))
+				chunk.set_material_override(material)
+				chunk.set_translation(Vector3(x, y, z))
+				add_child(chunk)
+
+
+func _rebuild_chunk(chunk):
+	#Get chunk position
+	var pos = chunk.get_translation()
+	
+	#Generate chunk mesh and shape
+	var st = SurfaceTool.new() #solids
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var st2 = SurfaceTool.new() #liquids
+	st2.begin(Mesh.PRIMITIVE_TRIANGLES)
+	
+	for z in range(16):
+		for y in range(16):
+			for x in range(16):
+				#Skip empty voxels
+				var voxel = get_voxel(pos.x + x, pos.y + y, pos.z + z)
+				
+				if not voxel:
+					continue
+					
+				#Generate top side?
+				if pos.y + y == size.y - 1 or not get_voxel(pos.x + x, pos.y + y + 1, pos.z + z):
+					_gen_voxel_top(st, st2, Vector3(x, y, z), voxel)
+					
+				#Generate bottom side?
+				if pos.y + y == 0 or not get_voxel(pos.x + x, pos.y + y - 1, pos.z + z):
+					_gen_voxel_bottom(st, st2, Vector3(x, y, z), voxel)
+					
+				#Generate left side?
+				if pos.x + x == 0 or not get_voxel(pos.x + x - 1, pos.y + y, pos.z + z):
+					_gen_voxel_left(st, st2, Vector3(x, y, z), voxel)
+					
+				#Generate right side?
+				if pos.x + x == size.x - 1 or not get_voxel(pos.x + x + 1, pos.y + y, pos.z + z):
+					_gen_voxel_right(st, st2, Vector3(x, y, z), voxel)
+					
+				#Generate front side?
+				if pos.z + z == size.z - 1 or not get_voxel(pos.x + x, pos.y + y, pos.z + z + 1):
+					_gen_voxel_front(st, st2, Vector3(x, y, z), voxel)
+					
+				#Generate back side?
+				if pos.z + z == 0 or not get_voxel(pos.x + x, pos.y + y, pos.z + z - 1):
+					_gen_voxel_back(st, st2, Vector3(x, y, z), voxel)
+					
+	#Generate normals
+	st.generate_normals()
+	st2.generate_normals()
+	
+	#Generate mesh
+	var mesh = st.commit()
+	var shape = ConcavePolygonShape.new()
+	shape.set_faces(mesh.get_faces())
+	st2.commit(mesh)
+	
+	#Set chunk mesh and collision shape
+	var body = chunk.get_node("StaticBody")
+	chunk.set_mesh(mesh)
+	body.clear_shapes()
+	body.add_shape(shape)
 	
 	
 func get_voxel(x, y, z):
@@ -73,119 +165,12 @@ func set_voxel(x, y, z, value):
 	
 	#Queue the containing chunk for rebuilding if it isn't already
 	var chunk_pos = Vector3(int(x / 16), int(y / 16), int(z / 16))
-	var chunks_size = size / 16
-	var chunk = chunks[chunk_pos.z * chunks_size.x * chunks_size.y + chunk_pos.y * chunks_size.x + chunk_pos.x]
+	var chunk = get_node("Chunk" + str(chunk_pos * 16))
 	
-	if chunk == null:
-		rebuild_queue.append(chunk_pos)
-		queue_sorted = false
-		
-	elif chunk != null and not chunk.dirty:
+	if not chunk.dirty:
 		chunk.dirty = true
-		rebuild_queue.append(chunk_pos)
+		rebuild_queue.push_back(chunk)
 		queue_sorted = false
-	
-	
-func set_size(value):
-	size = value
-	
-	#Clear the rebuild queue, clear the chunk list, free existing chunks,
-	#resize the voxel array, and resize the chunk array
-	rebuild_queue.clear()
-	
-	if get_tree():
-		get_tree().call_group(
-		    get_tree().GROUP_CALL_DEFAULT,
-		    "VoxelTerrainChunk",
-		    "queue_free"
-		)
-	
-	voxels.resize(size.x * size.y * size.z)
-	chunks.resize((size.x / 16) * (size.y / 16) * (size.z / 16))
-	
-	#Fill the chunk array with placeholders
-	for i in range(chunks.size()):
-		chunks[i] = Chunk.new()
-	
-	
-func set_material(value):
-	material = value
-	
-	if get_tree():
-		get_tree().call_group(
-		    get_tree().GROUP_CALL_DEFAULT,
-		    "VoxelTerrainChunk",
-		    "set_material_override",
-		    value
-		)
-
-
-func _create_chunk(pos):
-	#Generate chunk mesh and shape
-	var st = SurfaceTool.new() #solids
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var st2 = SurfaceTool.new() #liquids
-	st2.begin(Mesh.PRIMITIVE_TRIANGLES)
-	
-	for z in range(pos.z, pos.z + 16):
-		for y in range(pos.y, pos.y + 16):
-			for x in range(pos.x, pos.x + 16):
-				#Skip empty voxels
-				var voxel = get_voxel(x, y, z)
-				
-				if not voxel:
-					continue
-					
-				#Generate top side?
-				if y == size.y or not get_voxel(x, y + 1, z):
-					_gen_voxel_top(st, st2, Vector3(x, y, z) - pos, voxel)
-					
-				#Generate bottom side?
-				if y == 0 or not get_voxel(x, y - 1, z):
-					_gen_voxel_bottom(st, st2, Vector3(x, y, z) - pos, voxel)
-					
-				#Generate left side?
-				if x == 0 or not get_voxel(x - 1, y, z):
-					_gen_voxel_left(st, st2, Vector3(x, y, z) - pos, voxel)
-					
-				#Generate right side?
-				if x == size.x or not get_voxel(x + 1, y, z):
-					_gen_voxel_right(st, st2, Vector3(x, y, z) - pos, voxel)
-					
-				#Generate front side?
-				if z == size.z or not get_voxel(x, y, z + 1):
-					_gen_voxel_front(st, st2, Vector3(x, y, z) - pos, voxel)
-					
-				#Generate back side?
-				if z == 0 or not get_voxel(x, y, z - 1):
-					_gen_voxel_back(st, st2, Vector3(x, y, z) - pos, voxel)
-					
-	#Generate normals
-	st.generate_normals()
-	st2.generate_normals()
-	
-	#Generate mesh
-	var mesh = st.commit()
-	var shape = ConcavePolygonShape.new()
-	shape.set_faces(mesh.get_faces())
-	st2.commit(mesh)
-	
-	#Create mesh instance
-	var chunk = Chunk.new()
-	chunk.set_mesh(mesh)
-	chunk.set_material_override(material)
-	chunk.set_translation(pos)
-	add_child(chunk)
-	
-	#Generate static body
-	var body = StaticBody.new()
-	body.add_shape(shape)
-	chunk.add_child(body)
-	
-	#Generate collision shape
-	var col_shape = CollisionShape.new()
-	col_shape.set_shape(shape)
-	body.add_child(col_shape)
 	
 	
 func _gen_voxel_top(st, st2, pos, voxel):
@@ -367,4 +352,4 @@ func _by_distance(a, b):
 	var cam_pos = get_viewport().get_camera().get_translation()
 	
 	#Compare distance from the camera
-	return cam_pos.distance_to(a) < cam_pos.distance_to(b)
+	return cam_pos.distance_to(a.get_translation()) < cam_pos.distance_to(b.get_translation())

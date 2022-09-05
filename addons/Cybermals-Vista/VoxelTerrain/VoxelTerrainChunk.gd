@@ -4,6 +4,10 @@ var dirty = false
 
 
 func _ready():
-	#Set name and group
-	set_name("Chunk")
+	#Add to chunk group
 	add_to_group("VoxelTerrainChunk")
+	
+	#Create static body
+	var body = StaticBody.new()
+	body.set_name("StaticBody")
+	add_child(body)

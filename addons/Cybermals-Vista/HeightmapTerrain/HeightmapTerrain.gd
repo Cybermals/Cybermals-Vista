@@ -64,7 +64,6 @@ func set_heightmap(value):
 			#Create new chunk
 			var chunk = Chunk.new()
 			chunk.set_name("Chunk" + str(Vector2(x, z)))
-			chunk.add_to_group("HeightmapTerrainChunk")
 			chunk.set_material_override(material)
 			chunk.set_translation(Vector3(x, 0.0, z))
 			add_child(chunk)
