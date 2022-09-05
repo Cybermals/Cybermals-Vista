@@ -45,6 +45,12 @@ func set_material(value):
 	
 func set_heightmap(value):
 	heightmap = value
+	
+	#Return if there is no heightmap
+	if not heightmap:
+		return
+		
+	#Cache heightmap image
 	image = heightmap.get_data()
 	
 	#Free old chunks
