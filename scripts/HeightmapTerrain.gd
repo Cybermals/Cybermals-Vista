@@ -7,6 +7,13 @@ func _ready():
 	yield(get_node("HeightmapTerrain"), "rebuild_complete")
 	print("Terrain rebuilt in " + str(OS.get_ticks_msec() - start_time) + " msec.")
 	
+	#Modify terrain and save heightmap
+	#for z in range(64):
+	#	for x in range(64):
+	#		get_node("HeightmapTerrain").set_height(x, z, 50)
+			
+	#get_node("HeightmapTerrain").save_heightmap("res://images/heightmap2.png")
+	
 	#Enable event processing
 	set_process(true)
 	

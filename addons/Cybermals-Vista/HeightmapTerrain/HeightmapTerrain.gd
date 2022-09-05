@@ -150,6 +150,9 @@ func get_height(x, z):
 
 
 func set_height(x, z, h):
+	#Adjust height value based on terrain height scale
+	h = h / get_scale().y
+	
 	#Do bounds check
 	var size = Vector2(image.get_width(), image.get_height())
 	
@@ -197,3 +200,7 @@ func set_height(x, z, h):
 		if not chunk.dirty:
 			chunk.dirty = true
 			rebuild_queue.push_back(chunk)
+			
+			
+func save_heightmap(filename):
+	image.save_png(filename)
