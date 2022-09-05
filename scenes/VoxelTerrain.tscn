@@ -111,7 +111,7 @@ shadow/zoffset_scale = 2.0
 [node name="FlyCam" type="Camera" parent="."]
 
 _import_transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 )
-transform/local = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 64, -2 )
+transform/local = Transform( -0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, -0.707107, -2, 64, -2 )
 projection = 0
 fov = 45.0
 near = 0.1
@@ -129,7 +129,7 @@ __meta__ = {
 move_speed = 8
 look_speed = 128
 slowdown_factor = 0.5
-rotation = Vector3( 0, 135, 0 )
+rotation = Vector3( 0, -135, 0 )
 
 [node name="RayCast" type="RayCast" parent="FlyCam"]
 
