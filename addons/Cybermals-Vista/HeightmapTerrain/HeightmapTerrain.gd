@@ -18,14 +18,11 @@ func _ready():
 	
 func _process(delta):
 	#Are there chunks to rebuild?
-	if not rebuild_queue.empty():
-		#Fetch next chunk to rebuild
+	if not rebuild_queue.empty() and image != null:
+		#Rebuild next chunk
 		var chunk = rebuild_queue.front()
 		rebuild_queue.pop_front()
-			
-		#Rebuild the chunk
-		var chunk_pos = chunk.get_translation()
-		_rebuild_chunk(Vector2(chunk_pos.x, chunk_pos.z), image.get_rect(Rect2(chunk_pos.x, chunk_pos.z, 65, 65)))
+		_rebuild_chunk(chunk)
 		
 	else:
 		#Emit rebuild complete signal
@@ -72,17 +69,17 @@ func set_heightmap(value):
 			chunk.set_translation(Vector3(x, 0.0, z))
 			add_child(chunk)
 			
-			#Create static body
-			var body = StaticBody.new()
-			body.set_name("StaticBody")
-			chunk.add_child(body)
-			
 			#Queue chunk for rebuilding
 			chunk.dirty = true
-			rebuild_queue.push_back(get_node("Chunk" + str(Vector2(x, z))))
+			rebuild_queue.push_back(chunk)
 
 
-func _rebuild_chunk(pos, image):
+func _rebuild_chunk(chunk):
+	#Get rebuild region
+	var chunk_pos = chunk.get_translation()
+	var pos = Vector2(chunk_pos.x, chunk_pos.z)
+	var region = image.get_rect(Rect2(pos.x, pos.y, 65, 65))
+	
 	#Generate mesh
 	#Note: Each terrain chunk is 64 tiles by 64 tiles, so we need 65 
 	#vertices in each of the 2 dimensions.
@@ -92,7 +89,7 @@ func _rebuild_chunk(pos, image):
 	for z in range(65):
 		for x in range(65):
 			st.add_uv((pos + Vector2(x, z)) / heightmap.get_size())
-			st.add_vertex(Vector3(x, image.get_pixel(x, z).r, z))
+			st.add_vertex(Vector3(x, region.get_pixel(x, z).r, z))
 			
 	for z in range(64):
 		for x in range(64):
@@ -111,7 +108,6 @@ func _rebuild_chunk(pos, image):
 	shape.set_faces(mesh.get_faces())
 	
 	#Set chunk mesh and generate new collision shape
-	var chunk = get_node("Chunk" + str(pos))
 	var body = chunk.get_node("StaticBody")
 	chunk.set_mesh(mesh)
 	body.clear_shapes()
