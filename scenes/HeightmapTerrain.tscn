@@ -68,18 +68,18 @@ uniform texture dirt_mask;
 uniform texture rock_mask;
 
 //Sample base texture
-vec3 col = tex(grass, UV * vec2(512, 512)).rgb;
+vec3 col = tex(grass, UV * vec2(256, 256)).rgb;
 
 //Is this portion dirt?
 if(tex(dirt_mask, UV).a != 0)
 {
-    col = tex(dirt, UV * vec2(512, 512)).rgb;
+    col = tex(dirt, UV * vec2(256, 256)).rgb;
 }
 
 //Is this portion rock?
 if(tex(rock_mask, UV).a != 0)
 {
-    col = tex(rock, UV * vec2(512, 512)).rgb;
+    col = tex(rock, UV * vec2(256, 256)).rgb;
 }
 
 DIFFUSE = col;",

@@ -4,10 +4,11 @@ extends Spatial
 signal rebuild_progress(current, total)
 signal rebuild_complete
 
+var image = null
+
 export (Material) var material = null setget set_material
 export (ImageTexture) var heightmap = null setget set_heightmap
 
-var chunks = []
 var rebuild_state = null
 
 
@@ -38,12 +39,13 @@ func set_material(value):
 	
 func set_heightmap(value):
 	heightmap = value
+	image = heightmap.get_data()
 	rebuild_state = rebuild()
 	
 	
 func rebuild():
-	#Skip terrain rebuilding if no heightmap
-	if not heightmap:
+	#Skip terrain rebuilding if no height data
+	if image == null:
 		return
 		
 	#Free old chunks
@@ -53,26 +55,20 @@ func rebuild():
 			"HeightmapTerrainChunk", 
 			"queue_free"
 		)
-		chunks.clear()
 	
 	#Rebuild terrain
 	#Note: We use co-routines here to keep the game responsive during the 
 	#terrain rebuilding process and to avoid race conditions that would 
 	#occur if threads were used.
-	var width = heightmap.get_width()
-	var depth = heightmap.get_height()
-	var image = heightmap.get_data()
+	var width = image.get_width()
+	var depth = image.get_height()
 	var chunk_count = (width / 64) * (depth / 64)
 	
 	for z in range(0, depth - 1, 64):
-		var row = []
-		
 		for x in range(0, width - 1, 64):
-			row.append(_create_chunk(Vector2(x, z), image.get_rect(Rect2(x, z, 65, 65))))
+			_create_chunk(Vector2(x, z), image.get_rect(Rect2(x, z, 65, 65)))
 			emit_signal("rebuild_progress", (z / 64) * (depth / 64) + (x / 64), chunk_count)
 			yield()
-			
-		chunks.append(row)
 		
 	#Emit rebuild complete signal
 	emit_signal("rebuild_complete")
@@ -103,7 +99,7 @@ func _create_chunk(pos, image):
 	
 	#Generate mesh instance
 	var chunk = MeshInstance.new()
-	chunk.set_name("Chunk")
+	chunk.set_name("Chunk" + str(pos))
 	chunk.add_to_group("HeightmapTerrainChunk")
 	chunk.set_mesh(st.commit())
 	chunk.set_material_override(material)
@@ -119,8 +115,6 @@ func _create_chunk(pos, image):
 	colshape.set_shape(body.get_shape(0))
 	body.add_child(colshape)
 	
-	return chunk
-	
 	
 func get_height(x, z):
 	#Remove scale from input coords
@@ -128,7 +122,7 @@ func get_height(x, z):
 	z = z / get_scale().z
 	
 	#Do bounds check
-	var size = heightmap.get_size()
+	var size = Vector2(image.get_width(), image.get_height())
 	
 	if x < 0 or x > size.x - 1:
 		return 0
@@ -137,7 +131,6 @@ func get_height(x, z):
 		return 0
 		
 	#Sample the height of the 4 points around the given coordinate
-	var image = heightmap.get_data()
 	var h1 = image.get_pixel(floor(x), floor(z)).r
 	var h2 = image.get_pixel(ceil(x), floor(z)).r
 	var h3 = image.get_pixel(floor(x), ceil(z)).r
@@ -155,47 +148,3 @@ func get_height(x, z):
 	#And now we calculate the height at the given point
 	var zfactor = ceil(z) - floor(z)
 	return (hx1 + (hx2 - hx1) * zfactor) * get_scale().y
-	
-
-func set_height(x, z, h):
-	#If the terrain is rebuilding, yield until it is rebuilt
-	if is_rebuilding():
-		yield(self, "rebuild_complete")
-	
-	#Remove scale from input coords and height
-	x = int(x / get_scale().x)
-	z = int(z / get_scale().z)
-	h = h / get_scale().y
-	
-	#Update heightmap
-	var image = heightmap.get_data()
-	image.put_pixel(x, z, Color(h, h, h))
-	heightmap.set_data(image)
-	
-	#Calculate which chunk contains the point and the offset within the chunk
-	var cx = int(x / 64)
-	var cz = int(z / 64)
-	var ox = x % 64
-	var oz = z % 64
-	
-	#Delete old chunk and generate new chunk
-	chunks[cz][cx].queue_free()
-	chunks[cz][cx] = _create_chunk(Vector2(cx * 64, cz * 64), image.get_rect(Rect2(cx * 64, cz * 64, 65, 65)))
-	
-	#Handle (literal) edge cases to prevent holes in the terrain mesh
-	if not ox and cx:
-		chunks[cz][cx - 1].queue_free()
-		chunks[cz][cx - 1] = _create_chunk(Vector2((cx - 1) * 64, cz * 64), image.get_rect(Rect2((cx - 1) * 64, cz * 64, 65, 65)))
-		
-	if not oz and cz:
-		chunks[cz - 1][cx].queue_free()
-		chunks[cz - 1][cx] = _create_chunk(Vector2(cx * 64, (cz - 1) * 64), image.get_rect(Rect2(cx * 64, (cz - 1) * 64, 65, 65)))
-		
-	#Handle "corner" cases too
-	if not ox and not oz and cx and cz:
-		chunks[cz - 1][cx - 1].queue_free()
-		chunks[cz - 1][cx - 1] = _create_chunk(Vector2((cx - 1) * 64, (cz - 1) * 64), image.get_rect(Rect2((cx - 1) * 64, (cz - 1) * 64, 65, 65)))
-
-
-func is_rebuilding():
-	return rebuild_state != null
