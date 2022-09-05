@@ -40,14 +40,7 @@ func set_material(value):
 func set_heightmap(value):
 	heightmap = value
 	image = heightmap.get_data()
-	rebuild_state = rebuild()
 	
-	
-func rebuild():
-	#Skip terrain rebuilding if no height data
-	if image == null:
-		return
-		
 	#Free old chunks
 	if get_tree():
 		get_tree().call_group(
@@ -55,6 +48,30 @@ func rebuild():
 			"HeightmapTerrainChunk", 
 			"queue_free"
 		)
+		
+	#Initialize chunks
+	for z in range(0, image.get_width() - 1, 64):
+		for x in range(0, image.get_height() - 1, 64):
+			#Create new chunk
+			var chunk = MeshInstance.new()
+			chunk.set_name("Chunk" + str(Vector2(x, z)))
+			chunk.add_to_group("HeightmapTerrainChunk")
+			chunk.set_material_override(material)
+			chunk.set_translation(Vector3(x, 0.0, z))
+			add_child(chunk)
+			
+			#Create static body
+			var body = StaticBody.new()
+			body.set_name("StaticBody")
+			chunk.add_child(body)
+			
+	rebuild_state = rebuild()
+	
+	
+func rebuild():
+	#Skip terrain rebuilding if no height data
+	if image == null:
+		return
 	
 	#Rebuild terrain
 	#Note: We use co-routines here to keep the game responsive during the 
@@ -97,23 +114,11 @@ func _create_chunk(pos, image):
 			
 	st.generate_normals()
 	
-	#Generate mesh instance
-	var chunk = MeshInstance.new()
-	chunk.set_name("Chunk" + str(pos))
-	chunk.add_to_group("HeightmapTerrainChunk")
+	#Set chunk mesh and generate new collision shape
+	var chunk = get_node("Chunk" + str(pos))
+	var body = chunk.get_node("StaticBody")
 	chunk.set_mesh(st.commit())
-	chunk.set_material_override(material)
-	chunk.set_translation(Vector3(pos.x, 0.0, pos.y))
-	add_child(chunk)
-	
-	#Generate static body
-	var body = StaticBody.new()
 	body.add_shape(chunk.get_mesh().create_trimesh_shape())
-	chunk.add_child(body)
-	
-	var colshape = CollisionShape.new()
-	colshape.set_shape(body.get_shape(0))
-	body.add_child(colshape)
 	
 	
 func get_height(x, z):
@@ -148,3 +153,7 @@ func get_height(x, z):
 	#And now we calculate the height at the given point
 	var zfactor = ceil(z) - floor(z)
 	return (hx1 + (hx2 - hx1) * zfactor) * get_scale().y
+
+
+func set_height(x, z, h):
+	pass
