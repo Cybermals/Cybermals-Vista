@@ -184,6 +184,4 @@ heightmap = ExtResource( 11 )
 
 transform/local = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 47.7939, 32.5109, 7.79119 )
 
-[connection signal="rebuild_progress" from="HeightmapTerrain" to="." method="_on_HeightmapTerrain_rebuild_progress"]
-
 

@@ -1,15 +1,14 @@
 tool
 extends Spatial
 
-signal rebuild_progress(current, total)
 signal rebuild_complete
 
+var Chunk = preload("HeightmapTerrainChunk.gd")
 var image = null
+var rebuild_queue = []
 
 export (Material) var material = null setget set_material
 export (ImageTexture) var heightmap = null setget set_heightmap
-
-var rebuild_state = null
 
 
 func _ready():
@@ -18,9 +17,19 @@ func _ready():
 	
 	
 func _process(delta):
-	#Resume terrain rebuilding
-	if rebuild_state:
-		rebuild_state = rebuild_state.resume()
+	#Are there chunks to rebuild?
+	if not rebuild_queue.empty():
+		#Fetch next chunk to rebuild
+		var chunk = rebuild_queue.front()
+		rebuild_queue.pop_front()
+			
+		#Rebuild the chunk
+		var chunk_pos = chunk.get_translation()
+		_rebuild_chunk(Vector2(chunk_pos.x, chunk_pos.z), image.get_rect(Rect2(chunk_pos.x, chunk_pos.z, 65, 65)))
+		
+	else:
+		#Emit rebuild complete signal
+		emit_signal("rebuild_complete")
 	
 	
 func set_material(value):
@@ -42,18 +51,21 @@ func set_heightmap(value):
 	image = heightmap.get_data()
 	
 	#Free old chunks
+	rebuild_queue.clear()
+	
 	if get_tree():
 		get_tree().call_group(
 			get_tree().GROUP_CALL_DEFAULT, 
 			"HeightmapTerrainChunk", 
 			"queue_free"
 		)
+		yield(get_tree(), "idle_frame")
 		
 	#Initialize chunks
 	for z in range(0, image.get_width() - 1, 64):
 		for x in range(0, image.get_height() - 1, 64):
 			#Create new chunk
-			var chunk = MeshInstance.new()
+			var chunk = Chunk.new()
 			chunk.set_name("Chunk" + str(Vector2(x, z)))
 			chunk.add_to_group("HeightmapTerrainChunk")
 			chunk.set_material_override(material)
@@ -65,33 +77,12 @@ func set_heightmap(value):
 			body.set_name("StaticBody")
 			chunk.add_child(body)
 			
-	rebuild_state = rebuild()
-	
-	
-func rebuild():
-	#Skip terrain rebuilding if no height data
-	if image == null:
-		return
-	
-	#Rebuild terrain
-	#Note: We use co-routines here to keep the game responsive during the 
-	#terrain rebuilding process and to avoid race conditions that would 
-	#occur if threads were used.
-	var width = image.get_width()
-	var depth = image.get_height()
-	var chunk_count = (width / 64) * (depth / 64)
-	
-	for z in range(0, depth - 1, 64):
-		for x in range(0, width - 1, 64):
-			_create_chunk(Vector2(x, z), image.get_rect(Rect2(x, z, 65, 65)))
-			emit_signal("rebuild_progress", (z / 64) * (depth / 64) + (x / 64), chunk_count)
-			yield()
-		
-	#Emit rebuild complete signal
-	emit_signal("rebuild_complete")
-			
-			
-func _create_chunk(pos, image):
+			#Queue chunk for rebuilding
+			chunk.dirty = true
+			rebuild_queue.push_back(get_node("Chunk" + str(Vector2(x, z))))
+
+
+func _rebuild_chunk(pos, image):
 	#Generate mesh
 	#Note: Each terrain chunk is 64 tiles by 64 tiles, so we need 65 
 	#vertices in each of the 2 dimensions.
@@ -113,12 +104,19 @@ func _create_chunk(pos, image):
 			st.add_index(z * 65 + x)
 			
 	st.generate_normals()
+	var mesh = st.commit()
+	
+	#Generate collision shape
+	var shape = ConcavePolygonShape.new()
+	shape.set_faces(mesh.get_faces())
 	
 	#Set chunk mesh and generate new collision shape
 	var chunk = get_node("Chunk" + str(pos))
 	var body = chunk.get_node("StaticBody")
-	chunk.set_mesh(st.commit())
-	body.add_shape(chunk.get_mesh().create_trimesh_shape())
+	chunk.set_mesh(mesh)
+	body.clear_shapes()
+	body.add_shape(shape)
+	chunk.dirty = false
 	
 	
 func get_height(x, z):
@@ -156,4 +154,50 @@ func get_height(x, z):
 
 
 func set_height(x, z, h):
-	pass
+	#Do bounds check
+	var size = Vector2(image.get_width(), image.get_height())
+	
+	if x < 0 or x > size.x - 1:
+		return
+		
+	if z < 0 or z > size.y - 1:
+		return
+		
+	#Update heightmap image
+	image.put_pixel(x, z, Color(h, h, h))
+	
+	#Calculate which chunk was modified
+	var cx = int(x / 64)
+	var cz = int(z / 64)
+	var ox = x % 64
+	var oz = z % 64
+	
+	#Queue the chunk for rebuilding if it isn't already
+	var chunk = get_node("Chunk" + str(Vector2(cx * 64, cz * 64)))
+	
+	if not chunk.dirty:
+		chunk.dirty = true
+		rebuild_queue.push_back(chunk)
+		
+	#Handle (literal) edge cases
+	if not ox and cx:
+		chunk = get_node("Chunk" + str(Vector2((cx - 1) * 64, cz * 64)))
+		
+		if not chunk.dirty:
+			chunk.dirty = true
+			rebuild_queue.push_back(chunk)
+			
+	if not oz and cz:
+		chunk = get_node("Chunk" + str(Vector2(cx * 64, (cz - 1) * 64)))
+		
+		if not chunk.dirty:
+			chunk.dirty = true
+			rebuild_queue.push_back(chunk)
+			
+	#Handle corner cases too
+	if not ox and cx and not oz and cz:
+		chunk = get_node("Chunk" + str(Vector2((cx - 1) * 64, (cz - 1) * 64)))
+		
+		if not chunk.dirty:
+			chunk.dirty = true
+			rebuild_queue.push_back(chunk)
